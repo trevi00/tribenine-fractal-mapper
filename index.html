@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>트라이브 나인 프랙탈 맵핑기</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #f0fff0; }
+    canvas { display: block; background: #fff; }
+    #toolbar {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(255,255,255,0.95);
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 8px;
+      font-family: sans-serif;
+      width: 260px;
+    }
+    #map-list-panel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 260px;
+      background: rgba(255,255,255,0.95);
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 8px;
+      font-family: sans-serif;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    #map-list-panel div {
+      margin-bottom: 5px;
+      padding: 4px;
+      border-bottom: 1px dashed #ccc;
+    }
+    #map-list-panel button {
+      margin-left: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button onclick="addRoom()">방 추가</button>
+    <button onclick="addLine('h-line')">가로 선</button>
+    <button onclick="addLine('v-line')">세로 선</button>
+    <button onclick="deleteSelected()">삭제</button>
+    <button onclick="clearAll()">모두 삭제</button>
+    <button onclick="saveToCache()">💾 맵 저장</button>
+    <br>
+    <span>오브젝트 추가:</span><br>
+    <button onclick="selectObject('locked')">🔒</button>
+    <button onclick="selectObject('key')">🗝️</button>
+    <button onclick="selectObject('monster')">⚔️</button>
+    <button onclick="selectObject('boss')">👑</button>
+    <hr>
+    <div style="font-size: 12px; line-height: 1.4; color: #444;">
+      📏 <b>선 길이 조절 방법:</b><br>
+      - 선의 <b>양 끝에 있는 주황색 원</b>을 드래그해보세요.<br>
+      - 선끼리 끝이 만나면 <b>하나의 원으로 통합</b>되어 표시됩니다.
+    </div>
+  </div>
+
+  <div id="map-list-panel">
+    <b>🗂 저장된 맵 목록:</b>
+    <div id="maps"></div>
+  </div>
+
+  <canvas id="mapCanvas" width="1400" height="900"></canvas>
+
+  <script>
+    const canvas = document.getElementById('mapCanvas');
+    const ctx = canvas.getContext('2d');
+  
+    let rooms = [], lines = [], objects = [];
+    let draggingRoom = null, draggingLine = null, draggingObject = null, resizingLine = null;
+    let offsetX = 0, offsetY = 0;
+    let selectedObjectType = null;
+    let selectedRoom = null;
+    let selectedLine = null;
+  
+    const objectIcons = {
+      locked: '🔒', key: '🗝️', monster: '⚔️', boss: '👑'
+    };
+  
+    canvas.addEventListener('mousedown', (e) => {
+      const mouse = getMouse(e);
+      for (let l of lines) {
+        if (isOnHandle(l, mouse.x, mouse.y)) {
+          resizingLine = l;
+          return;
+        }
+      }
+  
+      selectedRoom = findRoom(mouse.x, mouse.y);
+      selectedLine = findLine(mouse.x, mouse.y);
+  
+      if (selectedLine) {
+        draggingLine = selectedLine;
+        offsetX = mouse.x - selectedLine.x;
+        offsetY = mouse.y - selectedLine.y;
+        return;
+      }
+      if (selectedRoom) {
+        draggingRoom = selectedRoom;
+        offsetX = mouse.x - selectedRoom.x;
+        offsetY = mouse.y - selectedRoom.y;
+        return;
+      }
+  
+      const obj = findObject(mouse.x, mouse.y);
+      if (obj) {
+        draggingObject = obj;
+        offsetX = mouse.x - obj.x;
+        offsetY = mouse.y - obj.y;
+        return;
+      }
+  
+      if (selectedObjectType) {
+        objects.push({ type: selectedObjectType, x: mouse.x, y: mouse.y });
+        selectedObjectType = null;
+        draw();
+      }
+    });
+  
+    canvas.addEventListener('mouseup', () => {
+      draggingRoom = null;
+      draggingObject = null;
+      draggingLine = null;
+      resizingLine = null;
+    });
+  
+    canvas.addEventListener('mousemove', (e) => {
+      const mouse = getMouse(e);
+      if (resizingLine) {
+        if (resizingLine.type === 'h-line') {
+          resizingLine.length = Math.max(10, mouse.x - resizingLine.x);
+        } else {
+          resizingLine.length = Math.max(10, mouse.y - resizingLine.y);
+        }
+        draw();
+        return;
+      }
+      if (draggingRoom) {
+        draggingRoom.x = mouse.x - offsetX;
+        draggingRoom.y = mouse.y - offsetY;
+        snapToNearby(draggingRoom);
+        draw();
+      }
+      if (draggingObject) {
+        draggingObject.x = mouse.x - offsetX;
+        draggingObject.y = mouse.y - offsetY;
+        draw();
+      }
+      if (draggingLine) {
+        draggingLine.x = mouse.x - offsetX;
+        draggingLine.y = mouse.y - offsetY;
+        snapToNearby(draggingLine);
+        draw();
+      }
+    });
+  
+    function getMouse(e) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+  
+    function isOnHandle(line, x, y) {
+      const dx = line.type === 'h-line' ? x - (line.x + line.length) : x - line.x;
+      const dy = line.type === 'v-line' ? y - (line.y + line.length) : y - line.y;
+      return Math.hypot(dx, dy) < 8;
+    }
+  
+    function findRoom(x, y) {
+      return rooms.find(r => Math.abs(r.x - x) < 40 && Math.abs(r.y - y) < 20);
+    }
+  
+    function findLine(x, y) {
+      return lines.find(l => {
+        const withinX = l.type === 'h-line' && Math.abs(y - l.y) < 5 && x >= l.x && x <= l.x + l.length;
+        const withinY = l.type === 'v-line' && Math.abs(x - l.x) < 5 && y >= l.y && y <= l.y + l.length;
+        return withinX || withinY;
+      });
+    }
+  
+    function findObject(x, y) {
+      return objects.find(o => Math.hypot(o.x - x, o.y - y) < 20);
+    }
+  
+    function snapToNearby(obj) {
+      const snapRange = 10;
+      const allItems = [...rooms, ...lines];
+      for (let other of allItems) {
+        if (other === obj) continue;
+        if (Math.abs(obj.x - other.x) < snapRange) obj.x = other.x;
+        if (Math.abs(obj.y - other.y) < snapRange) obj.y = other.y;
+      }
+    }
+  
+    function addRoom() {
+      const name = prompt("방 이름 입력:", `Room${rooms.length + 1}`);
+      if (name) {
+        rooms.push({ x: 100 + rooms.length * 100, y: 300, name });
+        draw();
+      }
+    }
+  
+    function addLine(type) {
+      lines.push({ type, x: 300, y: 300, length: 100 });
+      draw();
+    }
+  
+    function selectObject(type) {
+      selectedObjectType = type;
+    }
+  
+    function deleteSelected() {
+      if (selectedRoom) rooms = rooms.filter(r => r !== selectedRoom);
+      if (selectedLine) lines = lines.filter(l => l !== selectedLine);
+      selectedRoom = null;
+      selectedLine = null;
+      draw();
+    }
+  
+    function clearAll() {
+      rooms = [];
+      lines = [];
+      objects = [];
+      selectedRoom = null;
+      selectedLine = null;
+      draw();
+    }
+  
+    function saveToCache() {
+      const name = prompt("저장할 맵 이름 (예: B1층)");
+      if (!name) return;
+      const key = "map_" + name;
+      if (localStorage.getItem(key)) {
+        const overwrite = confirm(`${name} 맵이 이미 있습니다. 덮어쓸까요?`);
+        if (!overwrite) return;
+      }
+      const data = { rooms, lines, objects };
+      localStorage.setItem(key, JSON.stringify(data));
+      loadMapList();
+    }
+  
+    function loadMapFromCache(name) {
+      const data = JSON.parse(localStorage.getItem("map_" + name));
+      if (!data) return;
+      rooms = data.rooms || [];
+      lines = data.lines || [];
+      objects = data.objects || [];
+      draw();
+    }
+  
+    function deleteMap(name) {
+      if (confirm(`${name} 맵을 삭제할까요?`)) {
+        localStorage.removeItem("map_" + name);
+        loadMapList();
+      }
+    }
+  
+    function loadMapList() {
+      const container = document.getElementById("maps");
+      container.innerHTML = "<b>저장된 맵:</b><br/>";
+      Object.keys(localStorage)
+        .filter(k => k.startsWith("map_"))
+        .forEach(key => {
+          const name = key.replace("map_", "");
+          const div = document.createElement("div");
+          div.innerHTML = `${name} <button onclick='loadMapFromCache(\"${name}\")'>불러오기</button> <button onclick='deleteMap(\"${name}\")'>삭제</button>`;
+          container.appendChild(div);
+        });
+    }
+  
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+      const handleSet = new Set();
+  
+      lines.forEach(l => {
+        ctx.beginPath();
+        if (l.type === 'h-line') {
+          ctx.moveTo(l.x, l.y);
+          ctx.lineTo(l.x + l.length, l.y);
+        } else {
+          ctx.moveTo(l.x, l.y);
+          ctx.lineTo(l.x, l.y + l.length);
+        }
+        ctx.strokeStyle = '#999';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+  
+        const p1 = `${l.x},${l.y}`;
+        const p2 = l.type === 'h-line' ? `${l.x + l.length},${l.y}` : `${l.x},${l.y + l.length}`;
+  
+        for (let p of [p1, p2]) {
+          if (!handleSet.has(p)) {
+            const [hx, hy] = p.split(',').map(Number);
+            ctx.beginPath();
+            ctx.arc(hx, hy, 6, 0, Math.PI * 2);
+            ctx.fillStyle = 'orange';
+            ctx.fill();
+            ctx.stroke();
+            handleSet.add(p);
+          }
+        }
+      });
+  
+      rooms.forEach(r => {
+        ctx.fillStyle = 'lightblue';
+        ctx.fillRect(r.x - 40, r.y - 20, 80, 40);
+        ctx.strokeStyle = '#333';
+        ctx.strokeRect(r.x - 40, r.y - 20, 80, 40);
+        ctx.fillStyle = '#000';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(r.name, r.x, r.y + 5);
+      });
+  
+      objects.forEach(o => {
+        ctx.font = '20px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(objectIcons[o.type] || '?', o.x, o.y);
+      });
+    }
+  
+    loadMapList();
+    draw();
+  </script>
+  
+</body>
+</html>
