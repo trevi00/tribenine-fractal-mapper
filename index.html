@@ -55,7 +55,7 @@
     <button onclick="selectObject('key')">🗝️</button>
     <button onclick="selectObject('monster')">⚔️</button>
     <button onclick="selectObject('boss')">👑</button>
-    <button onclick="selectObject('gold')">💰</button>
+    <button onclick="selectObject('gold')">🟨</button>
     <hr>
     <div style="font-size: 12px; line-height: 1.4; color: #444;">
       📏 <b>선 길이 조절 방법:</b><br>
@@ -83,7 +83,7 @@
     let selectedLine = null;
   
     const objectIcons = {
-      locked: '🔒', key: '🗝️', monster: '⚔️', boss: '👑', gold: '💰'
+      locked: '🔒', key: '🗝️', monster: '⚔️', boss: '👑', gold: '🟨'
     };
   
     canvas.addEventListener('mousedown', (e) => {
