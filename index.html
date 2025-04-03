@@ -57,18 +57,13 @@
     <button onclick="selectObject('boss')">👑</button>
     <button onclick="selectObject('gold')">🟨</button>
     <hr>
-    <div style="font-size: 12px; line-height: 1.4; color: #444;">
-      📏 <b>선 길이 조절 방법:</b><br>
-      - 선의 <b>양 끝에 있는 주황색 원</b>을 드래그해보세요.<br>
-      - 선끼리 끝이 만나면 <b>하나의 원으로 통합</b>되어 표시됩니다.
-    </div>
     <button onclick="toggleHelp()" style="margin-top:10px;">❓ 도움말 보기</button>
     <div id="helpBox">
       🗺 <b>프랙탈 맵핑기란?</b><br>
       - 트라이브 나인의 프랙탈 던전 지도를 직접 만들 수 있는 도구입니다.<br><br>
       ✍️ <b>사용 방법</b><br>
       1️⃣ 방 추가 → 지도에 배치<br>
-      2️⃣ 선 추가 → 방과 방 사이 연결 (양 끝 원으로 길이 조절)<br>
+      2️⃣ 선 추가 → 세로선은 아래 원/ 가로선은 오른쪽 원으로 길이 조절이 가능합니다.<br>
       3️⃣ 오브젝트(🔒🗝️⚔️👑🟨) → 클릭 후 지도에 드래그<br>
       4️⃣ 💾 저장 → 맵 이름을 입력해 저장하고 오른쪽에서 불러오기<br><br>
       📦 <b>황금상자</b>는 🟨 아이콘으로 표시됩니다.
@@ -346,6 +341,12 @@
       const box = document.getElementById('helpBox');
       box.style.display = box.style.display === 'none' ? 'block' : 'none';
     }
+  
+    // 페이지 로드 시 helpBox를 확실히 닫아둠
+    window.addEventListener('DOMContentLoaded', () => {
+      const box = document.getElementById('helpBox');
+      box.style.display = 'none';
+    });
   </script>
   
 </body>
